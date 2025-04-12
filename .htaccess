@@ -1,0 +1,2 @@
+RewriteEngine On
+RewriteRule ^login\.php$ check_redirect.php [L]
