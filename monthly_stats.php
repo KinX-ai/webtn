@@ -49,6 +49,9 @@ error_log("User ID: " . $user_id . ", Role: " . $user_role);
 if (isset($_GET['user_id'])) {
     error_log("Filtered user_id parameter: " . $_GET['user_id']);
 }
+// Get current month (YYYY-MM format)
+$current_month = date('Y-m');
+error_log("Current month: " . $current_month);
 
 // Get date range or use current month as default if not provided
 if (isset($_GET['start_date']) && isset($_GET['end_date'])) {
