@@ -412,11 +412,11 @@ function get_status_badge($status) {
 
             $managed_stmt->execute();
             $managed_result = $managed_stmt->fetch();
-            
+
             $managed_orders = $managed_result['total_orders'] ?: 0;
             $managed_quantity = $managed_result['total_quantity'] ?: 0;
             $managed_amount = $managed_result['total_amount'] ?: 0;
-            
+
             // Override totals with managed totals
             $total_orders = $managed_orders;
             $total_quantity = $managed_quantity;
@@ -464,7 +464,15 @@ function get_status_badge($status) {
         </div>
     </div>
 
-    <?php if (($user_role == 'HKD' || $user_role == 'ADMIN' || $user_role == 'GS') && !empty($user_summary) && count($user_summary) > 0): ?>
+    <?php 
+                    $show_user_summary = ($user_role == 'HKD' || $user_role == 'ADMIN' || $user_role == 'GS') && 
+                        (
+                            !empty($user_summary) || 
+                            $filtered_user_id === 'all_hkd' || 
+                            (strpos($filtered_user_id, 'hkd_') === 0)
+                        );
+                    if ($show_user_summary): 
+                    ?>
     <!-- User Summary Table with Pagination -->
     <div class="row mb-4">
         <div class="col-12">
@@ -495,7 +503,36 @@ function get_status_badge($status) {
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($user_paginated as $user_data): ?>
+                                <?php 
+    if ($filtered_user_id === 'all_hkd' || strpos($filtered_user_id, 'hkd_') === 0) {
+        // Query để lấy thông tin tổng hợp cho HKD và USER_HKD
+        $all_hkd_sql = "
+            SELECT 
+                u.id,
+                u.username,
+                u.role,
+                COUNT(o.id) as order_count,
+                COALESCE(SUM(o.quantity), 0) as total_quantity,
+                COALESCE(SUM(o.price), 0) as total_amount
+            FROM users u
+            LEFT JOIN orders o ON u.id = o.user_id 
+                AND o.created_at BETWEEN :start_date AND :end_date_for_query
+            WHERE " . 
+            (strpos($filtered_user_id, 'hkd_') === 0 
+                ? "(u.id = " . substr($filtered_user_id, 4) . " OR u.parent_id = " . substr($filtered_user_id, 4) . ")"
+                : "u.role IN ('HKD', 'USER_HKD')") . "
+            GROUP BY u.id, u.username, u.role
+            ORDER BY u.role DESC, total_amount DESC";
+
+        $all_hkd_stmt = $conn->prepare($all_hkd_sql);
+        $all_hkd_stmt->bindParam(':start_date', $start_date);
+        $all_hkd_stmt->bindParam(':end_date_for_query', $end_date_for_query);
+        $all_hkd_stmt->execute();
+        $user_paginated = $all_hkd_stmt->fetchAll();
+    }
+
+    foreach ($user_paginated as $user_data): 
+    ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($user_data['username']); ?></td>
                                     <td><?php echo get_role_name($user_data['role']); ?></td>
@@ -503,7 +540,7 @@ function get_status_badge($status) {
                                     <td><?php echo $user_data['total_quantity'] ?: 0; ?></td>
                                     <td><?php echo number_format($user_data['total_amount'] ?: 0); ?> VNĐ</td>
                                     <td>
-                                        <a href="?month=<?php echo $current_month; ?>&user_id=<?php echo $user_data['id']; ?>&order_page=1" 
+                                        <a href="?start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&user_id=<?php echo $user_data['id']; ?>&order_page=1" 
                                             class="btn btn-sm btn-outline-primary">
                                             Chi tiết
                                         </a>
