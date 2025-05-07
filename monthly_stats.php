@@ -101,8 +101,11 @@ try {
         WHERE o.created_at BETWEEN :start_date AND :end_date_for_query ";
 
     // Add user-specific conditions based on role and filtered user
-    if ($filtered_user_id === 'all_hkd') {
-        // FIX: Include both HKD and USER_HKD roles
+    if ($filtered_user_id === 'all_users' && ($user_role == 'ADMIN' || $user_role == 'GS')) {
+        // Không thêm điều kiện WHERE để hiển thị tất cả người dùng
+        $sql .= ""; // Giữ nguyên query để lấy tất cả
+    } elseif ($filtered_user_id === 'all_hkd') {
+        // Include both HKD and USER_HKD roles
         $sql .= "AND u.role IN ('USER_HKD', 'HKD') ";
     } elseif ($filtered_user_id !== null && strpos($filtered_user_id, 'hkd_') === 0) {
         $hkd_id = substr($filtered_user_id, 4); // Extract HKD ID
@@ -311,11 +314,16 @@ function get_status_badge($status) {
                         <div class="col-md-4">
                             <label for="user_select" class="form-label small mb-1">Người dùng:</label>
                             <select name="user_id" id="user_select" class="form-select form-select-sm">
-                                <option value="">-- Tất cả người dùng --</option>
+                               <!-- <option value="">-- Tất cả người dùng --</option> -->
                                 <?php if ($user_role == 'ADMIN' || $user_role == 'GS'): ?>
-                                <!-- <option value="all_hkd" <?php echo ($filtered_user_id === 'all_hkd') ? 'selected' : ''; ?>>
-                                    Tổng hợp tất cả HKD và USER_HKD
+                               <!-- <option value="all_users" <?php echo ($filtered_user_id === 'all_users') ? 'selected' : ''; ?>>
+                                    Tổng hợp tất cả người dùng
                                 </option> -->
+                                <?php endif; ?>
+                                <?php if ($user_role == 'ADMIN' || $user_role == 'GS' || $user_role == 'HKD'): ?>
+                                <option value="all_hkd" <?php echo ($filtered_user_id === 'all_hkd') ? 'selected' : ''; ?>>
+                                    Tổng hợp tất cả HKD và USER_HKD
+                                </option>
                                 <?php endif; ?>
                                 <?php
                                 // Lấy danh sách HKD
@@ -371,21 +379,49 @@ function get_status_badge($status) {
         <?php
         // Get total stats for all managed users if user is HKD
         $managed_total = 0;
+        $managed_orders = 0;
+        $managed_quantity = 0;
+        $managed_amount = 0;
+
         if ($user_role == 'HKD') {
             $managed_sql = "
-                SELECT SUM(o.price) as total_amount
+                SELECT 
+                    COUNT(o.id) as total_orders,
+                    SUM(o.quantity) as total_quantity,
+                    SUM(o.price) as total_amount
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
-                WHERE (u.parent_id = :user_id OR o.user_id = :user_id)
-                AND o.created_at BETWEEN :start_date AND :end_date_for_query";
+                WHERE (u.parent_id = :user_id OR o.user_id = :user_id)";
+
+            // Nếu có filtered_user_id cụ thể
+            if ($filtered_user_id && $filtered_user_id !== 'all_hkd' && strpos($filtered_user_id, 'hkd_') !== 0) {
+                $managed_sql .= " AND o.user_id = :filtered_user_id";
+            }
+
+            $managed_sql .= " AND o.created_at BETWEEN :start_date AND :end_date_for_query";
 
             $managed_stmt = $conn->prepare($managed_sql);
             $managed_stmt->bindParam(':user_id', $user_id);
             $managed_stmt->bindParam(':start_date', $start_date);
             $managed_stmt->bindParam(':end_date_for_query', $end_date_for_query);
+
+            // Bind filtered_user_id nếu có
+            if ($filtered_user_id && $filtered_user_id !== 'all_hkd' && strpos($filtered_user_id, 'hkd_') !== 0) {
+                $managed_stmt->bindParam(':filtered_user_id', $filtered_user_id);
+            }
+
             $managed_stmt->execute();
             $managed_result = $managed_stmt->fetch();
-            $managed_total = $managed_result['total_amount'] ?: 0;
+            
+            $managed_orders = $managed_result['total_orders'] ?: 0;
+            $managed_quantity = $managed_result['total_quantity'] ?: 0;
+            $managed_amount = $managed_result['total_amount'] ?: 0;
+            
+            // Override totals with managed totals
+            $total_orders = $managed_orders;
+            $total_quantity = $managed_quantity;
+            $total_amount = $managed_amount;
+            $managed_total = $managed_amount;
         }
         ?>
 
@@ -602,6 +638,9 @@ function get_status_badge($status) {
                             if ($filtered_user_id && $filtered_user_id !== 'all_hkd' && ($filtered_user_id === null || strpos($filtered_user_id, 'hkd_') !== 0)) {
                                 error_log("All orders - binding filtered_user_id: " . $filtered_user_id);
                                 $orders_stmt->bindParam(':filtered_user_id', $filtered_user_id);
+                            } elseif ($filtered_user_id === 'all_users' && ($user_role == 'ADMIN' || $user_role == 'GS')) {
+                                // Không cần thêm điều kiện, lấy tất cả đơn hàng
+                                error_log("All orders - showing all users for ADMIN/GS");
                             } elseif ($filtered_user_id !== null && strpos($filtered_user_id, 'hkd_') === 0) {
                                 // Nếu filter là hkd_X, xử lý khác
                                 error_log("All orders - detected hkd_X filter, getting all orders for HKD: " . substr($filtered_user_id, 4));
