@@ -300,7 +300,8 @@ function get_status_badge($status) {
                 </div>
                 <?php if ($user_role == 'HKD' || $user_role == 'ADMIN' || $user_role == 'GS'): ?>
                 <div class="card-body py-3">
-                    <form action="" method="get" class="row g-2 align-items-end">
+                    <div id="date-error" class="alert alert-danger mt-2" style="display: none;"></div>
+                    <form action="" method="get" class="row g-2 align-items-end" onsubmit="return validateDates()">
                         <div class="col-md-3">
                             <label for="start_date" class="form-label small mb-1">Từ ngày:</label>
                             <input type="date" name="start_date" id="start_date" class="form-control form-control-sm" 
@@ -884,6 +885,34 @@ window.onerror = function(message, source, lineno, colno, error) {
     console.error("JavaScript Error:", message, "at", source, ":", lineno, ":", colno);
     return false;
 };
+
+// Kiểm tra ngày
+function validateDates() {
+    var startDate = new Date(document.getElementById('start_date').value);
+    var endDate = new Date(document.getElementById('end_date').value);
+    var filterBtn = document.querySelector('button[type="submit"]');
+    var errorDiv = document.getElementById('date-error');
+    
+    if (startDate > endDate) {
+        errorDiv.textContent = 'Ngày bắt đầu không được lớn hơn ngày kết thúc!';
+        errorDiv.style.display = 'block';
+        filterBtn.disabled = true;
+        return false;
+    } else {
+        errorDiv.style.display = 'none';
+        filterBtn.disabled = false;
+        return true;
+    }
+}
+
+// Thêm sự kiện kiểm tra cho cả hai trường ngày
+document.addEventListener('DOMContentLoaded', function() {
+    var startDateInput = document.getElementById('start_date');
+    var endDateInput = document.getElementById('end_date');
+    
+    endDateInput.addEventListener('change', validateDates);
+    startDateInput.addEventListener('change', validateDates);
+});
 
 // Toggle between monthly and date range filters
 function toggleDateFilter() {
